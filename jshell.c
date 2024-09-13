@@ -15,15 +15,23 @@ char *jsh_getline(){
 
 char **jsh_splitline(char *line){
     char **arg_array;
+    char *token;
     size_t size = 512;
     int i = 0;
 
-    arg_array = (char**)malloc(sizeof(char[size]));
-    arg_array[i] = strtok(line, " ");
+    arg_array = (char**)malloc(sizeof(char) * size);
+    memset(arg_array, 0, 512);
 
-    while(arg_array[i] != NULL){
-        arg_array[++i] = strtok(NULL, " ");
-    }
+    token = strtok(line, " ");
+    do{
+        arg_array[i] = token;
+        i++;
+
+        token = strtok(NULL, " ");
+    } while(arg_array[i] != NULL);
+
+
+    arg_array[i+1] = NULL;
 
     return arg_array;
 }
@@ -32,10 +40,26 @@ int jsh_execute(char **args){
     pid_t pid, wpid;
     int status;
 
+    if (args[0] == NULL){
+        return 1;
+    }
+
     pid = fork();
-    execvp(args[0], args);
+    if (pid == 0){
+        // child process
+        if (execvp(args[0], args) == -1){
+            perror("jsh");
+        }
+    } else if (pid < 0){
+        // error forking
+        perror("jsh");
+    } else {
+        do {
+            waitpid(pid, &status, WUNTRACED);
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
     waitpid(pid, &status, WUNTRACED);
-    return 1;
+    return 0;
 }
 
 void jsh_loop(void){
@@ -50,6 +74,9 @@ void jsh_loop(void){
         status = jsh_execute(args);
 
     } while(status);
+
+    free(line);
+    free(args);
 }
 
 int main(int argc, char **argv){

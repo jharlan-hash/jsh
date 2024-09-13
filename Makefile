@@ -9,3 +9,4 @@ install:
 clean:
 	sudo rm /usr/local/bin/jsh
 	rm ./jsh
+
