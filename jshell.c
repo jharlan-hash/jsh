@@ -35,10 +35,11 @@ char **jsh_splitline(char *line){
 
     arg_array[i] = NULL;
 
-    // Debug print
+    #ifdef DEBUG
     for (int j = 0; j <= i; j++) {
         printf("array #%d: %s\n", j, arg_array[j] ? arg_array[j] : "NULL");
     }
+    #endif
 
     return arg_array;
 }
