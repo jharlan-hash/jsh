@@ -7,7 +7,7 @@ char *jsh_getline(){
     char *buf;
     size_t size = 512;
 
-    buf = (char*) malloc(sizeof(char[size]));
+    buf = (char*)malloc(sizeof(char[size]));
     getline(&buf, &size, stdin);
 
     return buf;
@@ -19,19 +19,26 @@ char **jsh_splitline(char *line){
     size_t size = 512;
     int i = 0;
 
-    arg_array = (char**)malloc(sizeof(char) * size);
+    line[strcspn(line, "\n")] = 0;
+
+    arg_array = (char**)malloc(sizeof(char*) * size);
     memset(arg_array, 0, 512);
 
     token = strtok(line, " ");
-    do{
+	while(token != NULL){
         arg_array[i] = token;
         i++;
 
         token = strtok(NULL, " ");
-    } while(arg_array[i] != NULL);
+    }
 
 
-    arg_array[i+1] = NULL;
+    arg_array[i] = NULL;
+
+    // Debug print
+    for (int j = 0; j <= i; j++) {
+        printf("array #%d: %s\n", j, arg_array[j] ? arg_array[j] : "NULL");
+    }
 
     return arg_array;
 }
@@ -55,10 +62,11 @@ int jsh_execute(char **args){
         perror("jsh");
     } else {
         do {
+
             waitpid(pid, &status, WUNTRACED);
         } while (!WIFEXITED(status) && !WIFSIGNALED(status));
     }
-    waitpid(pid, &status, WUNTRACED);
+
     return 0;
 }
 
@@ -73,7 +81,7 @@ void jsh_loop(void){
         args = jsh_splitline(line);
         status = jsh_execute(args);
 
-    } while(status);
+    } while(!status);
 
     free(line);
     free(args);
