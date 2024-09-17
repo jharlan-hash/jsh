@@ -8,6 +8,9 @@ char *jsh_getline(){
     size_t size = 512;
 
     buf = (char*)malloc(sizeof(char[size]));
+    if (!buf){
+        perror("Error allocating to buf");
+    }
     getline(&buf, &size, stdin);
 
     return buf;
@@ -52,21 +55,33 @@ int jsh_execute(char **args){
         return 1;
     }
 
-    pid = fork();
-    if (pid == 0){
-        // child process
-        if (execvp(args[0], args) == -1){
-            perror("jsh");
+    if (!strcmp(args[0], "cd")){
+        if (args[1] != NULL){
+            chdir(args[1]);
+        } else {
+            chdir(getenv("HOME"));
         }
-    } else if (pid < 0){
-        // error forking
-        perror("jsh");
+#ifdef DEBUG
+        printf("%s", args[1]);
+        system("pwd");
+#endif
     } else {
-        do {
-
-            waitpid(pid, &status, WUNTRACED);
-        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+        pid = fork();
+        if (pid == 0){
+            // child process
+            if (execvp(args[0], args) == -1){
+                perror("jsh");
+            }
+        } else if (pid < 0){
+            // error forking
+            perror("jsh");
+        } else {
+            do {
+                waitpid(pid, &status, WUNTRACED);
+            } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+        }
     }
+
 
     return 0;
 }
