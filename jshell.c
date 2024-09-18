@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <limits.h>
+int cmdlength = 0;
 
 /*returns nothing*/
 void builtin_cd(char *dest){
@@ -13,6 +14,24 @@ void builtin_cd(char *dest){
         // checking user's environment variables for "$HOME"
         chdir(getenv("HOME"));
     }
+}
+
+/* returns 0 on sucess, 1 on error */
+int jsh_logline(char **args){
+    FILE *fptr;
+    char file[512];
+
+    sprintf(file, "%s/.jsh_history", getenv("HOME"));
+    fptr = fopen(file, "a");
+    fprintf(fptr, "\n");
+
+
+    for(int i = 0; i < cmdlength; i++){
+        fprintf(fptr, "%s ", args[i]);
+    }
+
+    fclose(fptr);
+    return 0;
 }
 
 /*returns a pointer to a buffer containing the command entered and returns 0 on error*/
@@ -42,7 +61,7 @@ char **jsh_splitline(char *line){
     char **arg_array;
     char *token;
     size_t size = 512;
-    int i = 0;
+    cmdlength = 0;
 
     line[strcspn(line, "\n")] = 0;
 
@@ -50,21 +69,21 @@ char **jsh_splitline(char *line){
     memset(arg_array, 0, 512);
 
     token = strtok(line, " ");
-	while(token != NULL){
-        arg_array[i] = token;
-        i++;
+    while(token != NULL){
+        arg_array[cmdlength] = token;
+        cmdlength++;
 
         token = strtok(NULL, " ");
     }
 
 
-    arg_array[i] = NULL;
+    arg_array[cmdlength] = NULL;
 
-    #ifdef DEBUG
-    for (int j = 0; j <= i; j++) {
+#ifdef DEBUG
+    for (int j = 0; j <= cmdlength; j++) {
         printf("array #%d: %s\n", j, arg_array[j] ? arg_array[j] : "NULL");
     }
-    #endif
+#endif
 
     return arg_array;
 }
@@ -73,20 +92,23 @@ int jsh_execute(char **args){
     pid_t pid, wpid;
     int status;
 
+    /* break if no command specified */
     if (args[0] == NULL){
         return 1;
     }
-
 
     /*checks whether the command is cd*/
     if (!strcmp(args[0], "cd")){
         builtin_cd(args[1]);
     } else if (!strcmp(args[0], "exit")){
+        /* return immediately */
         return 1;
     } else {
+
         pid = fork();
+
         if (pid == 0){
-            // child process
+            /* if no error on forking, execute the first command in an array with args specified */
             if (execvp(args[0], args) == -1){
                 perror("jsh");
             }
@@ -95,6 +117,7 @@ int jsh_execute(char **args){
             perror("jsh");
         } else {
             do {
+                /* wait until the command is terminated before starting a new one */
                 waitpid(pid, &status, WUNTRACED);
             } while (!WIFEXITED(status) && !WIFSIGNALED(status));
         }
@@ -111,10 +134,10 @@ void jsh_loop(void){
     int status;
 
     do {
-        getcwd(cwd, sizeof(cwd));
-        printf("%s\n$ ", cwd);
+        printf("$ ");
         line = jsh_getline();
         args = jsh_splitline(line);
+        jsh_logline(args);
         status = jsh_execute(args);
 
     } while(!status);
@@ -124,7 +147,6 @@ void jsh_loop(void){
 }
 
 int main(int argc, char **argv){
-    system("clear");
     jsh_loop();
 
     return 0;
