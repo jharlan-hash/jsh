@@ -3,18 +3,52 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <limits.h>
+
 int cmdlength = 0;
 
+typedef struct {
+    char *name;
+    void (*func)(char **);
+} builtin_t;
+
+
 /*returns nothing*/
-void builtin_cd(char *dest){
-    if (dest != NULL){
+void builtin_cd(char **args){
+    if (args[1] != NULL){
         // checking if cd is called with no arguments
-        chdir(dest);
+        chdir(args[1]);
     } else {
         // checking user's environment variables for "$HOME"
         chdir(getenv("HOME"));
     }
 }
+
+void builtin_exit(char **args){
+    exit(EXIT_SUCCESS);
+}
+
+void builtin_history(char **args){
+    FILE *fptr;
+    char file[512];
+    char mystring[512];
+
+    snprintf(file, 512, "%s/.jsh_history", getenv("HOME"));
+
+    fptr = fopen(file, "r");
+
+    while (fgets(mystring, 512, fptr)){
+        printf("%s", mystring);
+    }
+    printf("\n");
+
+}
+
+builtin_t builtins[] = {
+    {"cd", builtin_cd},
+    {"exit", builtin_exit},
+    {"history", builtin_history},
+    {NULL, NULL}
+};
 
 /* returns 0 on sucess, 1 on error */
 int jsh_logline(char **args){
@@ -88,42 +122,43 @@ char **jsh_splitline(char *line){
     return arg_array;
 }
 
-int jsh_execute(char **args){
+void jsh_launch(char **args){
     pid_t pid, wpid;
     int status;
+    pid = fork();
+
+    if (pid == 0){
+        /* if no error on forking, execute the first command in an array with args specified */
+        if (execvp(args[0], args) == -1){
+            perror("jsh");
+        }
+    } else if (pid < 0){
+        // error forking
+        perror("jsh");
+    } else {
+        do {
+            /* wait until the command is terminated before starting a new one */
+            waitpid(pid, &status, WUNTRACED);
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
+}
+
+int jsh_execute(char **args){
+    int i;
 
     /* break if no command specified */
     if (args[0] == NULL){
         return 1;
     }
 
-    /*checks whether the command is cd*/
-    if (!strcmp(args[0], "cd")){
-        builtin_cd(args[1]);
-    } else if (!strcmp(args[0], "exit")){
-        /* return immediately */
-        return 1;
-    } else {
-
-        pid = fork();
-
-        if (pid == 0){
-            /* if no error on forking, execute the first command in an array with args specified */
-            if (execvp(args[0], args) == -1){
-                perror("jsh");
-            }
-        } else if (pid < 0){
-            // error forking
-            perror("jsh");
-        } else {
-            do {
-                /* wait until the command is terminated before starting a new one */
-                waitpid(pid, &status, WUNTRACED);
-            } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    for (i = 0; builtins[i].name != NULL; i++){
+        if (!strcmp(args[0], builtins[i].name)){
+            builtins[i].func(args);
+            return 0;
         }
     }
 
-
+    jsh_launch(args);
     return 0;
 }
 
@@ -140,10 +175,10 @@ void jsh_loop(void){
         jsh_logline(args);
         status = jsh_execute(args);
 
+        free(line);
+        free(args);
     } while(!status);
 
-    free(line);
-    free(args);
 }
 
 int main(int argc, char **argv){
@@ -151,5 +186,3 @@ int main(int argc, char **argv){
 
     return 0;
 }
-
-
