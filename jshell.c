@@ -1,10 +1,9 @@
+#include <errno.h>
+#include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <unistd.h>
-#include <limits.h>
-
-int cmdlength = 0;
 
 typedef struct {
     char *name;
@@ -12,11 +11,14 @@ typedef struct {
 } builtin_t;
 
 
-/*returns nothing*/
 void builtin_cd(char **args){
+    int error;
+
     if (args[1] != NULL){
         // checking if cd is called with no arguments
-        chdir(args[1]);
+        if (chdir(args[1])){
+            perror("error changing directories");
+        }
     } else {
         // checking user's environment variables for "$HOME"
         chdir(getenv("HOME"));
@@ -29,38 +31,49 @@ void builtin_exit(char **args){
 
 void builtin_history(char **args){
     FILE *fptr;
-    char file[512];
-    char mystring[512];
+    char file[PATH_MAX];
+    int envlen = strlen(getenv("HOME"));
+    int fnamelen = 15;
 
-    snprintf(file, 512, "%s/.jsh_history", getenv("HOME"));
+    if (snprintf(file, envlen + fnamelen, "%s/.jsh_history", getenv("HOME")) >= sizeof(file)){
+        fprintf(stderr, "File path too long");
+        exit(EXIT_FAILURE);
+    }
 
     fptr = fopen(file, "r");
-
-    while (fgets(mystring, 512, fptr)){
-        printf("%s", mystring);
+    if (!fptr){
+        perror("error opening history file");
+        exit(EXIT_FAILURE);
     }
-    printf("\n");
 
+    while (fgets(file, PATH_MAX, fptr)){
+        printf("%s", file);
+    }
+
+    printf("\n");
 }
 
-builtin_t builtins[] = {
-    {"cd", builtin_cd},
-    {"exit", builtin_exit},
-    {"history", builtin_history},
-    {NULL, NULL}
-};
-
-/* returns 0 on sucess, 1 on error */
+/* returns 0 on success, 1 on error */
 int jsh_logline(char **args){
     FILE *fptr;
-    char file[512];
+    char file[PATH_MAX];
+    int envlen = strlen(getenv("HOME"));
+    int fnamelen = 15;
 
-    sprintf(file, "%s/.jsh_history", getenv("HOME"));
+    if (snprintf(file, envlen + fnamelen, "%s/.jsh_history", getenv("HOME")) >= sizeof(file)){
+        fprintf(stderr, "File path too long");
+        exit(EXIT_FAILURE);
+    }
+
     fptr = fopen(file, "a");
+    if (!fptr){
+        perror("error opening history file");
+        exit(EXIT_FAILURE);
+    }
+
     fprintf(fptr, "\n");
 
-
-    for(int i = 0; i < cmdlength; i++){
+    for(int i = 0; args[i] != NULL; i++){
         fprintf(fptr, "%s ", args[i]);
     }
 
@@ -71,55 +84,67 @@ int jsh_logline(char **args){
 /*returns a pointer to a buffer containing the command entered and returns 0 on error*/
 char *jsh_getline(){
     char *buf;
-    int glret;
-    size_t size = 512;
+    int chars_read;
+    size_t size = 16;
 
     buf = (char*)malloc(sizeof(char[size]));
 
     if (!buf){
         perror("Error allocating to buf");
+        free(buf);
+        exit(EXIT_FAILURE);
     }
 
-    glret = getline(&buf, &size, stdin);
+    /* gnu getline automatically reallocates memory */
+    chars_read = getline(&buf, &size, stdin);
 
-    if (!glret){
-        perror("Error getting line in jsh_getline");
-        return 0;
-    } else {
-        return buf;
+    if (chars_read == -1) {
+        if (feof(stdin)) {
+            // End of file reached
+            free(buf);
+            return NULL;
+        } else {
+            perror("jsh: getline");
+            free(buf);
+            return NULL;
+        }
     }
+
+    return buf;
 }
 
 /*returns a pointer to an array of commands & arguments*/
 char **jsh_splitline(char *line){
-    char **arg_array;
+    int bufsize = LINE_MAX, position = 0;
+    char **tokens = malloc(bufsize * sizeof(char));
     char *token;
-    size_t size = 512;
-    cmdlength = 0;
+
+    if (!tokens){
+        perror("error allocating memory");
+        exit(EXIT_FAILURE);
+    }
 
     line[strcspn(line, "\n")] = 0;
-
-    arg_array = (char**)malloc(sizeof(char*) * size);
-    memset(arg_array, 0, 512);
-
     token = strtok(line, " ");
     while(token != NULL){
-        arg_array[cmdlength] = token;
-        cmdlength++;
+        tokens[position] = token;
+        position++;
 
+        if (position > bufsize){
+            bufsize += 64;
+            tokens = realloc(tokens, bufsize * sizeof(char*));
+
+            if (!tokens){
+                perror("error allocating memory");
+                exit(EXIT_FAILURE);
+            }
+        }
         token = strtok(NULL, " ");
     }
 
 
-    arg_array[cmdlength] = NULL;
-
-#ifdef DEBUG
-    for (int j = 0; j <= cmdlength; j++) {
-        printf("array #%d: %s\n", j, arg_array[j] ? arg_array[j] : "NULL");
-    }
-#endif
-
-    return arg_array;
+    tokens[position] = NULL;
+    return tokens;
 }
 
 int jsh_launch(char **args){
@@ -149,10 +174,16 @@ int jsh_launch(char **args){
 
 int jsh_execute(char **args){
     int i;
+    builtin_t builtins[] = {
+        {"cd", builtin_cd},
+        {"exit", builtin_exit},
+        {"history", builtin_history},
+        {NULL, NULL}
+    };
 
-    /* break if no command specified */
+    /* don't break if no command specified */
     if (args[0] == NULL){
-        return 1;
+        return 0;
     }
 
     for (i = 0; builtins[i].name != NULL; i++){
@@ -168,7 +199,6 @@ int jsh_execute(char **args){
 void jsh_loop(void){
     char *line;
     char **args;
-    char cwd[PATH_MAX];
     int status;
 
     do {
@@ -178,10 +208,10 @@ void jsh_loop(void){
         jsh_logline(args);
         status = jsh_execute(args);
 
+        free(line);
+        free(args);
     } while(!status);
 
-    free(line);
-    free(args);
 }
 
 int main(int argc, char **argv){
