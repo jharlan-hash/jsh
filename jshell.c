@@ -100,7 +100,7 @@ char *jsh_getline(){
 
     if (chars_read == -1) {
         if (feof(stdin)) {
-            // End of file reached
+            /* checking for EOF like ^D */
             free(buf);
             return NULL;
         } else {
