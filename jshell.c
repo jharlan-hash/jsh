@@ -122,7 +122,7 @@ char **jsh_splitline(char *line){
     return arg_array;
 }
 
-void jsh_launch(char **args){
+int jsh_launch(char **args){
     pid_t pid, wpid;
     int status;
     pid = fork();
@@ -131,16 +131,20 @@ void jsh_launch(char **args){
         /* if no error on forking, execute the first command in an array with args specified */
         if (execvp(args[0], args) == -1){
             perror("jsh");
+            return 1;
         }
     } else if (pid < 0){
         // error forking
         perror("jsh");
+        return 1;
     } else {
         do {
             /* wait until the command is terminated before starting a new one */
             waitpid(pid, &status, WUNTRACED);
+            return 0;
         } while (!WIFEXITED(status) && !WIFSIGNALED(status));
     }
+    return 0;
 }
 
 int jsh_execute(char **args){
@@ -158,8 +162,7 @@ int jsh_execute(char **args){
         }
     }
 
-    jsh_launch(args);
-    return 0;
+    return jsh_launch(args);
 }
 
 void jsh_loop(void){
@@ -175,10 +178,10 @@ void jsh_loop(void){
         jsh_logline(args);
         status = jsh_execute(args);
 
-        free(line);
-        free(args);
     } while(!status);
 
+    free(line);
+    free(args);
 }
 
 int main(int argc, char **argv){
