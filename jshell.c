@@ -67,8 +67,6 @@ void builtin_history(char **args){
     printf("\n");
 }
 
-
-
 void builtin_help(char **args){
     printf("This is the Jack Sovern SHell - JSSH\n");
     printf("There are several builtin commmands:\n");
@@ -224,21 +222,21 @@ void jssh_loop(void){
     char *line;
     char **args;
     int status;
-
     do {
-        //printf("$ ");
-        //line = jssh_getline();
-        //jssh_logline(args);
-
         char *input = readline("$ ");
+
+        read_history("/Users/25jaso/.jssh_history");
+
         if (!input){
             exit(EXIT_FAILURE);
         }
 
         add_history(input);
+        write_history("/Users/25jaso/.jssh_history");
 
         args = jssh_splitline(input);
         status = jssh_execute(args);
+
 
         free(args);
         free(input);
