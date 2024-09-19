@@ -1,10 +1,7 @@
 default:
-	clang jshell.c -o jsh
-	./jsh
-
-install:
-	clang jshell.c -o jsh
+	clang jshell.c -o jssh -lreadline
+	./jssh
 
 clean:
-	rm ./jsh
+	rm ./jssh
 
