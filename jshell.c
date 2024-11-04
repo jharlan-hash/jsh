@@ -1,4 +1,5 @@
 #include <errno.h>
+
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -168,7 +169,8 @@ char *jssh_getline() {
     return input;
 }
 
-void jssh_loop(void){
+/*  */
+int jssh_loop(void){
     char *line;
     char **args;
     char *input;
@@ -178,29 +180,49 @@ void jssh_loop(void){
         input = jssh_getline();
         args = jssh_splitline(input);
         status = jssh_execute(args);
-
-        free(args);
-        free(input);
     } while(!status);
 
+    free(args);
+    free(input);
+
+    return 0;
 }
 
-int jssh_init(){
-    read_history("/Users/25jaso/.jssh_history");
+
+/* returns 0 after initializing the shell
+ * mostly readline stuff*/
+int jssh_init(char *histfile){
+    read_history(histfile);
     rl_bind_key('\t', rl_complete);
     using_history();
 
     return 0;
 }
 
-int jssh_shutdown(){
-    write_history("/Users/25jaso/.jssh_history");
+/* returns 0 after writing history */
+int jssh_shutdown(char *histfile){
+    write_history(histfile);
     return 0;
 }
 
+/* returns 1 on error 0 on success */
+/* this is the main init function */
 int main(int argc, char **argv){
-    jssh_init();
+    char histfile[PATH_MAX];
+
+    if (getenv("HOME")){
+        if (!(snprintf(histfile, PATH_MAX, "%s%s", getenv("HOME"), "/.jssh_history"))){
+            perror("Truncation occurred in the history file - path too long");
+        }
+        //i'm unsure about this code - might be better to check how long the string is exactly to prevent truncation
+    } else {
+        perror("HOME variable unset");
+        return 1;
+    }
+
+    jssh_init(histfile);
     jssh_loop();
-    jssh_shutdown();
+    jssh_shutdown(histfile);
+
     return 0;
 }
