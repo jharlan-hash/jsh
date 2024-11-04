@@ -79,68 +79,6 @@ void builtin_help(char **args){
     printf("Run man on any other commands for info\n");
 }
 
-/*
-//returns 0 on success, 1 on error
-int jssh_logline(char **args){
-    FILE *fptr;
-    char file[PATH_MAX];
-    int envlen = strlen(getenv("HOME"));
-    int fnamelen = 15;
-
-    if (snprintf(file, envlen + fnamelen, "%s/.jssh_history", getenv("HOME")) >= sizeof(file)){
-        fprintf(stderr, "File path too long");
-        exit(EXIT_FAILURE);
-    }
-
-    fptr = fopen(file, "a");
-    if (!fptr){
-        perror("error opening history file");
-        exit(EXIT_FAILURE);
-    }
-
-    fprintf(fptr, "\n");
-
-    for(int i = 0; args[i] != NULL; i++){
-        fprintf(fptr, "%s ", args[i]);
-    }
-
-    fclose(fptr);
-    return 0;
-}
-
-//returns a pointer to a buffer containing the command entered and returns 0 on error
-char *jssh_getline(){
-    char *buf;
-    int chars_read;
-    size_t size = 16;
-
-    buf = (char*)malloc(sizeof(char[size]));
-
-    if (!buf){
-        perror("Error allocating to buf");
-        free(buf);
-        exit(EXIT_FAILURE);
-    }
-
-    // gnu getline automatically reallocates memory
-    chars_read = getline(&buf, &size, stdin);
-
-    if (chars_read == -1) {
-        if (feof(stdin)) {
-            // checking for EOF like ^D
-            free(buf);
-            return NULL;
-        } else {
-            perror("jssh: getline");
-            free(buf);
-            return NULL;
-        }
-    }
-
-    return buf;
-}
-*/
-
 /*returns a pointer to an array of commands & arguments*/
 char **jssh_splitline(char *line){
     int bufsize = LINE_MAX, position = 0;
@@ -203,7 +141,7 @@ int jssh_launch(char **args){
 int jssh_execute(char **args){
     int i;
 
-    /* don't break if no command specified */
+    /* break if no command specified */
     if (args[0] == NULL){
         return 0;
     }
@@ -218,25 +156,28 @@ int jssh_execute(char **args){
     return jssh_launch(args);
 }
 
+char *jssh_getline() {
+    char *input = readline("$ ");
+
+    if (!input){
+        return NULL;
+    }
+
+    add_history(input);
+
+    return input;
+}
+
 void jssh_loop(void){
     char *line;
     char **args;
+    char *input;
     int status;
+
     do {
-        char *input = readline("$ ");
-
-        read_history("/Users/25jaso/.jssh_history");
-
-        if (!input){
-            exit(EXIT_FAILURE);
-        }
-
-        add_history(input);
-        write_history("/Users/25jaso/.jssh_history");
-
+        input = jssh_getline();
         args = jssh_splitline(input);
         status = jssh_execute(args);
-
 
         free(args);
         free(input);
@@ -244,11 +185,22 @@ void jssh_loop(void){
 
 }
 
-int main(int argc, char **argv){
+int jssh_init(){
+    read_history("/Users/25jaso/.jssh_history");
     rl_bind_key('\t', rl_complete);
     using_history();
 
-    jssh_loop();
+    return 0;
+}
 
+int jssh_shutdown(){
+    write_history("/Users/25jaso/.jssh_history");
+    return 0;
+}
+
+int main(int argc, char **argv){
+    jssh_init();
+    jssh_loop();
+    jssh_shutdown();
     return 0;
 }
